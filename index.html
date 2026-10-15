@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>BWF 배드민턴 4인 복식 서브 & 로테이션 시뮬레이터</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Prevent unwanted touch callouts and rubber-band scrolling */
+    html, body {
+      overscroll-behavior-y: none;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    /* Thin custom scrollbar */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #0b1120; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    
+    /* Touch active feedback */
+    .tap-press:active {
+      transform: scale(0.96);
+    }
+    
+    /* Canvas smooth render */
+    canvas {
+      image-rendering: auto;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden font-sans bg-slate-950 text-slate-100">
+
+  <!-- TOP HEADER -->
+  <header class="h-11 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between px-2.5 sm:px-3 z-30 shrink-0 backdrop-blur gap-1.5">
+    <div class="flex items-center gap-1.5 min-w-0">
+      <div class="w-6 h-6 rounded-lg bg-emerald-600 flex items-center justify-center text-white text-xs shadow-md shadow-emerald-500/20 shrink-0">
+        🏸
+      </div>
+      <h1 class="font-extrabold text-xs sm:text-sm tracking-tight text-slate-100 flex items-center gap-1 truncate">
+        <span class="truncate">BWF 복식 룰</span>
+        <span class="text-[8.5px] sm:text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono border border-amber-500/30 whitespace-nowrap shrink-0">21점 노듀스·11점 체인지</span>
+      </h1>
+    </div>
+
+    <!-- HEADER CONTROLS (SWITCH SERVE & RESET) -->
+    <div class="flex items-center gap-1 shrink-0">
+      <!-- Direct Serve Switch Button in Header -->
+      <button id="btnHeaderSwitchServe" type="button" class="tap-press whitespace-nowrap shrink-0 px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-[11px] font-bold flex items-center gap-1 shadow-sm transition" title="언제든 서브권 팀을 즉시 전환합니다">
+        <span class="text-xs">⇄</span>
+        <span>서브 전환</span>
+      </button>
+
+      <!-- Reset Simulation Button -->
+      <button id="btnResetAll" type="button" class="tap-press whitespace-nowrap shrink-0 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-300 text-[11px] font-semibold flex items-center gap-1 transition" title="0:0 리셋">
+        <span>↺</span>
+        <span class="hidden sm:inline">리셋</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- TOP SUB-BAR: LIVE DIRECTION & SERVING STATUS -->
+  <div class="h-8 bg-slate-900/90 border-b border-slate-800/80 flex items-center justify-between px-2.5 sm:px-3 z-20 shrink-0 text-[11px] gap-1.5">
+    <div class="flex items-center gap-1.5 truncate min-w-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+      <span id="hudDiagonalText" class="font-bold text-emerald-300 flex items-center gap-1 truncate">
+        <span>선수 A</span>
+        <span class="text-amber-400 font-black text-xs">➔ 대각선 ↗</span>
+        <span>선수 C</span>
+      </span>
+    </div>
+
+    <!-- Clickable Interactive Serve Status Badge -->
+    <button id="btnServingPill" type="button" class="tap-press whitespace-nowrap shrink-0 px-2 py-0.5 rounded-full bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 font-mono font-bold text-[10px] flex items-center gap-1 cursor-pointer transition" title="클릭하여 서브권 변경">
+      <span id="hudTurnPill">Team AB (선수 A) 서브</span>
+      <span class="text-amber-400 font-black text-[11px]">⇄</span>
+    </button>
+  </div>
+
+  <!-- MAIN VIEWPORT: COURT CANVAS -->
+  <main class="flex-1 relative w-full overflow-hidden bg-slate-950 flex flex-col justify-end items-center p-1 sm:p-2">
+    <!-- 11-Point Court Change Toast -->
+    <div id="courtChangeToast" class="hidden absolute top-3 z-30 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xs shadow-xl flex items-center gap-1.5 animate-bounce border border-amber-300">
+      <span>🔄</span>
+      <span>11점 도달! 코트 체인지 (진영 교대)</span>
+    </div>
+
+    <!-- 21-Point Match Over Modal Overlay -->
+    <div id="gameOverModal" class="hidden absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center">
+      <div class="bg-slate-900 border-2 border-amber-400/80 rounded-2xl p-5 max-w-xs w-full shadow-2xl space-y-3 transform transition-all">
+        <div class="text-3xl">🏆</div>
+        <div>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 font-mono font-bold">21점 단세트 경기 종료 (노듀스)</span>
+          <h2 id="modalWinnerTitle" class="text-lg font-black text-slate-100 mt-1">Team AB 승리!</h2>
+          <p id="modalScoreSummary" class="text-xs text-slate-400 font-mono mt-0.5">최종 스코어 21 : 18</p>
+        </div>
+        <p class="text-[11px] text-slate-300 bg-slate-950/60 p-2 rounded-xl border border-slate-800 leading-relaxed">
+          듀스 없는 21점 단세트 규정에 따라 경기가 완료되었습니다.
+        </p>
+        <div class="flex gap-2 pt-1">
+          <button id="btnModalClose" type="button" class="tap-press flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition">
+            기록 보기
+          </button>
+          <button id="btnModalRestart" type="button" class="tap-press flex-1 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-xs font-black shadow-lg shadow-emerald-500/20 transition">
+            새 게임 (0:0)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Canvas container with absolute positioning -->
+    <div id="canvasContainer" class="w-full h-full relative flex items-center justify-center">
+      <canvas id="courtCanvas" class="block rounded-xl shadow-2xl bg-emerald-950/60 border border-emerald-900/40"></canvas>
+    </div>
+
+    <!-- Floating Action: Fire Serve Button -->
+    <div class="absolute bottom-2 right-2 z-20">
+      <button id="btnTriggerServe" type="button" class="tap-press px-3 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/30 flex items-center gap-1.5 border border-emerald-300/40 transition">
+        <span class="text-sm">🏸</span>
+        <span>서브 실행</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- BOTTOM CONTROLLER: COMPACT SCOREBOARD & DEDICATED SERVE SWITCH -->
+  <footer class="shrink-0 bg-slate-900 border-t border-slate-800 p-2 sm:p-3 space-y-1.5 z-30">
+    
+    <!-- Big Dedicated Serve Switch Banner -->
+    <button id="btnMainSwitchServe" type="button" class="tap-press w-full py-1 px-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-amber-500/20 hover:from-amber-500/30 hover:to-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition">
+      <span class="text-sm font-black text-amber-400">⇄</span>
+      <span id="txtSwitchServeHint" class="truncate">현재 Team AB 서브 ➔ 클릭 시 CD로 전환</span>
+    </button>
+
+    <!-- Team Cards Grid -->
+    <div class="grid grid-cols-2 gap-2">
+      <!-- Team AB (Bottom Team) -->
+      <div id="cardTeamA" class="tap-press p-2 rounded-xl border-2 border-sky-500/80 bg-sky-500/10 flex flex-col justify-between transition cursor-pointer min-w-0" title="클릭하여 Team AB에 서브권 부여">
+        <div class="flex items-center justify-between gap-1 min-w-0">
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0"></span>
+            <span id="nameBadgeA" class="text-[11px] sm:text-xs font-black text-sky-400 tracking-tight">TEAM AB (하단)</span>
+          </div>
+          <span id="roleLabelA" class="whitespace-nowrap shrink-0 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-400 text-slate-950 shadow-sm leading-none tracking-tight">
+            🏸 서버 A
+          </span>
+        </div>
+
+        <div class="flex items-baseline justify-between my-0.5">
+          <span id="posTextA" class="text-[10px] text-slate-400 font-mono truncate">우: A / 좌: B</span>
+          <span id="scoreTextA" class="text-2xl font-black text-slate-100 tabular-nums">0</span>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="btnMinusA" class="tap-press w-8 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold text-xs border border-slate-700 transition">-1</button>
+          <button type="button" id="btnPlusA" class="tap-press flex-1 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-black text-xs shadow-md shadow-sky-600/30 transition">
+            +1 득점
+          </button>
+        </div>
+      </div>
+
+      <!-- Team CD (Top Team) -->
+      <div id="cardTeamB" class="tap-press p-2 rounded-xl border-2 border-slate-800 bg-slate-950/60 flex flex-col justify-between transition cursor-pointer min-w-0" title="클릭하여 Team CD에 서브권 부여">
+        <div class="flex items-center justify-between gap-1 min-w-0">
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0"></span>
+            <span id="nameBadgeB" class="text-[11px] sm:text-xs font-black text-rose-400 tracking-tight">TEAM CD (상단)</span>
+          </div>
+          <span id="roleLabelB" class="whitespace-nowrap shrink-0 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-800 text-slate-300 shadow-sm leading-none tracking-tight border border-slate-700/60">
+            🎯 리시버 C
+          </span>
+        </div>
+
+        <div class="flex items-baseline justify-between my-0.5">
+          <span id="posTextB" class="text-[10px] text-slate-400 font-mono truncate">우: C / 좌: D</span>
+          <span id="scoreTextB" class="text-2xl font-black text-slate-100 tabular-nums">0</span>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="btnMinusB" class="tap-press w-8 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold text-xs border border-slate-700 transition">-1</button>
+          <button type="button" id="btnPlusB" class="tap-press flex-1 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-black text-xs shadow-md shadow-rose-600/30 transition">
+            +1 득점
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Movement / Rule Notification Bar -->
+    <div id="movementBanner" class="p-1 px-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-300 flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-1.5 truncate">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span id="movementBannerText" class="truncate font-semibold">경기 시작 (0:0) - Team AB 선수 A가 셔틀콕을 들고 서브 대기 중</span>
+      </div>
+      <span id="scoreRuleBadge" class="px-1.5 py-0.2 rounded bg-slate-800/80 font-mono font-bold text-[9px] text-amber-300 border border-slate-700 shrink-0">
+        짝수(0) ➔ 우측
+      </span>
+    </div>
+  </footer>
+
+  <script>
+    // BWF Official Court Metric Specifications (Meters)
+    const COURT = {
+      length: 13.40,
+      width: 6.10,          // Doubles width
+      singlesWidth: 5.18,   // Singles width
+      alley: 0.46,          // Singles side-alley (6.10 - 5.18)/2
+      shortService: 1.98,   // Net to short service line
+      doublesLongFault: 0.76 // Back boundary line to doubles long service line
+    };
+
+    // Court Y-Lines (0 = Top CD Backline, 13.40 = Bottom AB Backline)
+    const Y_LINES = {
+      backTop: 0.00,
+      longTop: COURT.doublesLongFault,                  // 0.76m
+      shortTop: (COURT.length / 2) - COURT.shortService,// 4.72m
+      net: COURT.length / 2,                           // 6.70m
+      shortBottom: (COURT.length / 2) + COURT.shortService, // 8.68m
+      longBottom: COURT.length - COURT.doublesLongFault, // 12.64m
+      backBottom: COURT.length                         // 13.40m
+    };
+
+    // Application State
+    const AppState = {
+      scoreA: 0,
+      scoreB: 0,
+      servingTeam: 'A', // 'A' for Team AB, 'B' for Team CD
+      courtSwapped: false, // true after 11-point court change
+      isGameOver: false,
+      winnerTeam: null,
+      
+      // 4 Players: pos is 'R' (Right court) or 'L' (Left court)
+      players: {
+        A: { id: 'A', name: '선수 A', team: 'A', pos: 'R', color: '#0284c7', curX: 4.57, curY: 10.50, prevX: 4.57, prevY: 10.50, targetX: 4.57, targetY: 10.50, isMoving: false },
+        B: { id: 'B', name: '선수 B', team: 'A', pos: 'L', color: '#2563eb', curX: 1.52, curY: 10.50, prevX: 1.52, prevY: 10.50, targetX: 1.52, targetY: 10.50, isMoving: false },
+        C: { id: 'C', name: '선수 C', team: 'B', pos: 'R', color: '#e11d48', curX: 1.52, curY: 2.90, prevX: 1.52, prevY: 2.90, targetX: 1.52, targetY: 2.90, isMoving: false },
+        D: { id: 'D', name: '선수 D', team: 'B', pos: 'L', color: '#dc2626', curX: 4.57, curY: 2.90, prevX: 4.57, prevY: 2.90, targetX: 4.57, targetY: 2.90, isMoving: false }
+      },
+
+      // Shuttlecock state: When not in flight or landed, it stays in the server's hand!
+      shuttle: {
+        x: 4.57,
+        y: 9.80,
+        startX: 4.57,
+        startY: 9.80,
+        targetX: 1.52,
+        targetY: 2.74,
+        inFlight: false,
+        hasLanded: false,
+        progress: 0.0
+      },
+
+      // Movement animation
+      moveAnim: {
+        active: false,
+        progress: 1.0,
+        swappedTeam: null
+      },
+
+      pendingServe: false
+    };
+
+    // Canvas & Viewport Transform
+    const canvas = document.getElementById('courtCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvasContainer');
+
+    const viewTransform = {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      courtWidthPx: 0,
+      courtHeightPx: 0
+    };
+
+    // DOM References
+    const scoreTextA = document.getElementById('scoreTextA');
+    const scoreTextB = document.getElementById('scoreTextB');
+    const posTextA = document.getElementById('posTextA');
+    const posTextB = document.getElementById('posTextB');
+    const cardTeamA = document.getElementById('cardTeamA');
+    const cardTeamB = document.getElementById('cardTeamB');
+    const roleLabelA = document.getElementById('roleLabelA');
+    const roleLabelB = document.getElementById('roleLabelB');
+    const hudTurnPill = document.getElementById('hudTurnPill');
+    const hudDiagonalText = document.getElementById('hudDiagonalText');
+    const btnServingPill = document.getElementById('btnServingPill');
+    const btnHeaderSwitchServe = document.getElementById('btnHeaderSwitchServe');
+    const btnMainSwitchServe = document.getElementById('btnMainSwitchServe');
+    const txtSwitchServeHint = document.getElementById('txtSwitchServeHint');
+    const movementBannerText = document.getElementById('movementBannerText');
+    const scoreRuleBadge = document.getElementById('scoreRuleBadge');
+    const btnPlusA = document.getElementById('btnPlusA');
+    const btnMinusA = document.getElementById('btnMinusA');
+    const btnPlusB = document.getElementById('btnPlusB');
+    const btnMinusB = document.getElementById('btnMinusB');
+    const btnResetAll = document.getElementById('btnResetAll');
+    const btnTriggerServe = document.getElementById('btnTriggerServe');
+    const nameBadgeA = document.getElementById('nameBadgeA');
+    const nameBadgeB = document.getElementById('nameBadgeB');
+    const courtChangeToast = document.getElementById('courtChangeToast');
+    const gameOverModal = document.getElementById('gameOverModal');
+    const modalWinnerTitle = document.getElementById('modalWinnerTitle');
+    const modalScoreSummary = document.getElementById('modalScoreSummary');
+    const btnModalClose = document.getElementById('btnModalClose');
+    const btnModalRestart = document.getElementById('btnModalRestart');
+
+    function toPixelX(meterX) {
+      return viewTransform.offsetX + meterX * viewTransform.scale;
+    }
+    function toPixelY(meterY) {
+      return viewTransform.offsetY + meterY * viewTransform.scale;
+    }
+    function toMeterX(pixelX) {
+      return (pixelX - viewTransform.offsetX) / viewTransform.scale;
+    }
+    function toMeterY(pixelY) {
+      return (pixelY - viewTransform.offsetY) / viewTransform.scale;
+    }
+
+    // Determine current court end ('bottom' or 'top') for a player considering court change
+    function getPlayerSide(playerId) {
+      const isTeamA = (playerId === 'A' || playerId === 'B');
+      if (!AppState.courtSwapped) {
+        return isTeamA ? 'bottom' : 'top';
+      } else {
+        return isTeamA ? 'top' : 'bottom';
+      }
+    }
+
+    // BWF Doubles Serve Logic
+    function getServePositions() {
+      const isTeamA = (AppState.servingTeam === 'A');
+      const score = isTeamA ? AppState.scoreA : AppState.scoreB;
+      const isEven = (score % 2 === 0);
+
+      // Serving court: Even -> Right ('R'), Odd -> Left ('L')
+      const serverCourtSide = isEven ? 'R' : 'L';
+      // Doubles Receiver: Always diagonal from server's court
+      const receiverCourtSide = serverCourtSide;
+
+      let serverId, receiverId;
+
+      if (isTeamA) {
+        serverId = (AppState.players.A.pos === serverCourtSide) ? 'A' : 'B';
+        receiverId = (AppState.players.C.pos === receiverCourtSide) ? 'C' : 'D';
+      } else {
+        serverId = (AppState.players.C.pos === serverCourtSide) ? 'C' : 'D';
+        receiverId = (AppState.players.A.pos === receiverCourtSide) ? 'A' : 'B';
+      }
+
+      return { isTeamA, serverCourtSide, receiverCourtSide, isEven, serverId, receiverId };
+    }
+
+    // Get Target Valid Service Box (Adapts to post-11 court change side)
+    function getValidServiceBox() {
+      const { serverCourtSide, serverId } = getServePositions();
+      const midX = COURT.width / 2;
+      const serverSide = getPlayerSide(serverId);
+
+      let minX, maxX, minY, maxY;
+
+      if (serverSide === 'bottom') {
+        // Serving from bottom to top court
+        if (serverCourtSide === 'R') {
+          minX = 0;
+          maxX = midX;
+        } else {
+          minX = midX;
+          maxX = COURT.width;
+        }
+        minY = Y_LINES.longTop; // 0.76m
+        maxY = Y_LINES.shortTop; // 4.72m
+      } else {
+        // Serving from top to bottom court
+        if (serverCourtSide === 'R') {
+          minX = midX;
+          maxX = COURT.width;
+        } else {
+          minX = 0;
+          maxX = midX;
+        }
+        minY = Y_LINES.shortBottom; // 8.68m
+        maxY = Y_LINES.longBottom; // 12.64m
+      }
+
+      return { minX, maxX, minY, maxY };
+    }
+
+    // Calculate Coordinates considering court swap (at 11 points)
+    function getPlayerBaseMeter(playerId, courtSide) {
+      const side = getPlayerSide(playerId);
+      if (side === 'bottom') {
+        // Facing net from bottom: Right ('R') is screen-right (4.57m), Left is screen-left (1.52m)
+        const mx = (courtSide === 'R') ? 4.57 : 1.52;
+        return { x: mx, y: 10.50 };
+      } else {
+        // Facing net from top: Right ('R') is screen-left (1.52m), Left is screen-right (4.57m)
+        const mx = (courtSide === 'R') ? 1.52 : 4.57;
+        return { x: mx, y: 2.90 };
+      }
+    }
+
+    function resetRoster() {
+      AppState.players.A.pos = 'R';
+      AppState.players.B.pos = 'L';
+      AppState.players.C.pos = 'R';
+      AppState.players.D.pos = 'L';
+      AppState.courtSwapped = false;
+      AppState.isGameOver = false;
+      AppState.winnerTeam = null;
+      hideCourtChangeToast();
+      hideGameOverModal();
+
+      Object.values(AppState.players).forEach(p => {
+        const base = getPlayerBaseMeter(p.id, p.pos);
+        p.curX = base.x;
+        p.curY = base.y;
+        p.prevX = base.x;
+        p.prevY = base.y;
+        p.targetX = base.x;
+        p.targetY = base.y;
+        p.isMoving = false;
+      });
+      AppState.moveAnim.active = false;
+      AppState.moveAnim.swappedTeam = null;
+    }
+
+    // Position shuttlecock right in the server's hand (Idle state)
+    function holdShuttleAtServerHand() {
+      const { serverId } = getServePositions();
+      const serverPlayer = AppState.players[serverId];
+      const box = getValidServiceBox();
+      const serverSide = getPlayerSide(serverId);
+
+      // Destination target
+      AppState.shuttle.targetX = (box.minX + box.maxX) / 2;
+      AppState.shuttle.targetY = (box.minY + box.maxY) / 2;
+
+      // Start point at server's hand
+      if (serverPlayer) {
+        AppState.shuttle.startX = serverPlayer.curX;
+        AppState.shuttle.startY = (serverSide === 'bottom') ? serverPlayer.curY - 0.45 : serverPlayer.curY + 0.45;
+        AppState.shuttle.x = AppState.shuttle.startX;
+        AppState.shuttle.y = AppState.shuttle.startY;
+      }
+
+      AppState.shuttle.inFlight = false;
+      AppState.shuttle.hasLanded = false;
+      AppState.shuttle.progress = 0.0;
+    }
+
+    // Trigger Serve Flight animation
+    function triggerServeFlight() {
+      const { serverId } = getServePositions();
+      const serverPlayer = AppState.players[serverId];
+      const serverSide = getPlayerSide(serverId);
+      if (serverPlayer) {
+        AppState.shuttle.startX = serverPlayer.curX;
+        AppState.shuttle.startY = (serverSide === 'bottom') ? serverPlayer.curY - 0.45 : serverPlayer.curY + 0.45;
+      }
+      AppState.shuttle.progress = 0.0;
+      AppState.shuttle.inFlight = true;
+      AppState.shuttle.hasLanded = false;
+      AppState.pendingServe = false;
+    }
+
+    // Toggle Serving Team ANYTIME (User Feature)
+    function toggleServingTeam(targetTeam = null) {
+      const nextTeam = targetTeam || (AppState.servingTeam === 'A' ? 'B' : 'A');
+      AppState.servingTeam = nextTeam;
+
+      // BWF Doubles rule: Serve switch without scoring does NOT swap court positions!
+      updatePlayerTargets(null);
+      holdShuttleAtServerHand();
+
+      const { serverId } = getServePositions();
+      const teamLabel = (nextTeam === 'A') ? 'Team AB' : 'Team CD';
+      showMovementBanner(`서브권 전환! ${teamLabel} (선수 ${serverId}) 서브 대기`, '서브권 변경');
+
+      updateUI();
+      render();
+    }
+
+    function updatePlayerTargets(swappedTeam) {
+      AppState.moveAnim.swappedTeam = swappedTeam;
+      let anyMove = false;
+
+      Object.values(AppState.players).forEach(p => {
+        p.prevX = p.curX;
+        p.prevY = p.curY;
+        const target = getPlayerBaseMeter(p.id, p.pos);
+        p.targetX = target.x;
+        p.targetY = target.y;
+
+        const dist = Math.hypot(p.targetX - p.curX, p.targetY - p.curY);
+        if (dist > 0.05) {
+          p.isMoving = true;
+          anyMove = true;
+        } else {
+          p.isMoving = false;
+        }
+      });
+
+      if (anyMove) {
+        AppState.moveAnim.active = true;
+        AppState.moveAnim.progress = 0.0;
+      } else {
+        AppState.moveAnim.active = false;
+      }
+    }
+
+    function showMovementBanner(message, badgeText = '알림') {
+      movementBannerText.textContent = message;
+      scoreRuleBadge.textContent = badgeText;
+    }
+
+    function showCourtChangeToast() {
+      courtChangeToast.classList.remove('hidden');
+      setTimeout(() => {
+        hideCourtChangeToast();
+      }, 3500);
+    }
+    function hideCourtChangeToast() {
+      courtChangeToast.classList.add('hidden');
+    }
+
+    function showGameOverModal(winnerTeam) {
+      const winnerName = (winnerTeam === 'A') ? 'Team AB' : 'Team CD';
+      modalWinnerTitle.textContent = `${winnerName} 승리!`;
+      modalScoreSummary.textContent = `최종 스코어 ${AppState.scoreA} : ${AppState.scoreB}`;
+      gameOverModal.classList.remove('hidden');
+    }
+    function hideGameOverModal() {
+      gameOverModal.classList.add('hidden');
+    }
+
+    function updateUI() {
+      scoreTextA.textContent = AppState.scoreA;
+      scoreTextB.textContent = AppState.scoreB;
+
+      // Update Team Side Badges (Bottom vs Top)
+      nameBadgeA.textContent = AppState.courtSwapped ? 'TEAM AB (상단)' : 'TEAM AB (하단)';
+      nameBadgeB.textContent = AppState.courtSwapped ? 'TEAM CD (하단)' : 'TEAM CD (상단)';
+
+      // Display Player positions
+      const rightA = (AppState.players.A.pos === 'R') ? 'A' : 'B';
+      const leftA = (AppState.players.A.pos === 'L') ? 'A' : 'B';
+      posTextA.textContent = `우측: ${rightA} / 좌측: ${leftA}`;
+
+      const rightB = (AppState.players.C.pos === 'R') ? 'C' : 'D';
+      const leftB = (AppState.players.C.pos === 'L') ? 'C' : 'D';
+      posTextB.textContent = `우측: ${rightB} / 좌측: ${leftB}`;
+
+      const { isTeamA, serverCourtSide, isEven, serverId, receiverId } = getServePositions();
+      const score = isTeamA ? AppState.scoreA : AppState.scoreB;
+
+      if (isTeamA) {
+        cardTeamA.className = "tap-press p-2 rounded-xl border-2 border-sky-500 bg-sky-500/15 flex flex-col justify-between shadow-lg shadow-sky-500/10 transition min-w-0";
+        cardTeamB.className = "tap-press p-2 rounded-xl border-2 border-slate-800 bg-slate-950/60 flex flex-col justify-between transition hover:border-slate-700 cursor-pointer min-w-0";
+        roleLabelA.textContent = `🏸 서버 ${serverId}`;
+        roleLabelA.className = "whitespace-nowrap shrink-0 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-400 text-slate-950 shadow-sm leading-none tracking-tight";
+        roleLabelB.textContent = `🎯 리시버 ${receiverId}`;
+        roleLabelB.className = "whitespace-nowrap shrink-0 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-800 text-slate-300 shadow-sm leading-none tracking-tight border border-slate-700/60";
+        hudTurnPill.textContent = `Team AB (${serverId}) 서브`;
+        txtSwitchServeHint.textContent = `현재 Team AB 서브 ➔ 클릭 시 CD로 전환`;
+      } else {
+        cardTeamB.className = "tap-press p-2 rounded-xl border-2 border-rose-500 bg-rose-500/15 flex flex-col justify-between shadow-lg shadow-rose-500/10 transition min-w-0";
+        cardTeamA.className = "tap-press p-2 rounded-xl border-2 border-slate-800 bg-slate-950/60 flex flex-col justify-between transition hover:border-slate-700 cursor-pointer min-w-0";
+        roleLabelB.textContent = `🏸 서버 ${serverId}`;
+        roleLabelB.className = "whitespace-nowrap shrink-0 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-400 text-slate-950 shadow-sm leading-none tracking-tight";
+        roleLabelA.textContent = `🎯 리시버 ${receiverId}`;
+        roleLabelA.className = "whitespace-nowrap shrink-0 text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-800 text-slate-300 shadow-sm leading-none tracking-tight border border-slate-700/60";
+        hudTurnPill.textContent = `Team CD (${serverId}) 서브`;
+        txtSwitchServeHint.textContent = `현재 Team CD 서브 ➔ 클릭 시 AB로 전환`;
+      }
+
+      // Button state when game is over
+      if (AppState.isGameOver) {
+        btnPlusA.classList.add('opacity-40', 'pointer-events-none');
+        btnPlusB.classList.add('opacity-40', 'pointer-events-none');
+      } else {
+        btnPlusA.classList.remove('opacity-40', 'pointer-events-none');
+        btnPlusB.classList.remove('opacity-40', 'pointer-events-none');
+      }
+
+      scoreRuleBadge.textContent = isEven ? `짝수(${score}) ➔ 우측` : `홀수(${score}) ➔ 좌측`;
+      hudDiagonalText.innerHTML = `<span>선수 ${serverId}</span> <span class="text-amber-400 font-black text-xs">➔ 대각선 ↗</span> <span>선수 ${receiverId}</span>`;
+    }
+
+    // Scoring Functions (Includes 11-point Court Change & 21-point No-Deuce Match End)
+    function addScore(team) {
+      if (AppState.isGameOver) return;
+
+      const prevMax = Math.max(AppState.scoreA, AppState.scoreB);
+      let swappedTeam = null;
+
+      if (team === 'A') {
+        AppState.scoreA++;
+        if (AppState.servingTeam === 'A') {
+          // Serving team scored: Swap positions!
+          const temp = AppState.players.A.pos;
+          AppState.players.A.pos = AppState.players.B.pos;
+          AppState.players.B.pos = temp;
+          swappedTeam = 'A';
+          showMovementBanner(`Team AB 득점! 선수 A ↔ 선수 B 좌우 위치 교체`, '위치 스위치');
+        } else {
+          // Receiving team scored: Gains serve right! (NO player swap)
+          AppState.servingTeam = 'A';
+          showMovementBanner(`Team AB 서브권 획득! 양 팀 선수 위치 유지`, '위치 고정');
+        }
+      } else {
+        AppState.scoreB++;
+        if (AppState.servingTeam === 'B') {
+          const temp = AppState.players.C.pos;
+          AppState.players.C.pos = AppState.players.D.pos;
+          AppState.players.D.pos = temp;
+          swappedTeam = 'B';
+          showMovementBanner(`Team CD 득점! 선수 C ↔ 선수 D 좌우 위치 교체`, '위치 스위치');
+        } else {
+          AppState.servingTeam = 'B';
+          showMovementBanner(`Team CD 서브권 획득! 양 팀 선수 위치 유지`, '위치 고정');
+        }
+      }
+
+      const newMax = Math.max(AppState.scoreA, AppState.scoreB);
+
+      // RULE 1: 11-point Court Change
+      if (prevMax < 11 && newMax >= 11 && !AppState.courtSwapped) {
+        AppState.courtSwapped = true;
+        showCourtChangeToast();
+        showMovementBanner(`🔄 11점 도달! 코트 체인지(진영 교대) - 선수들이 네트를 건너 이동합니다`, '코트 체인지');
+      }
+
+      // RULE 2: 21-point Single Set Match End (No Deuce)
+      if (AppState.scoreA >= 21 || AppState.scoreB >= 21) {
+        AppState.isGameOver = true;
+        AppState.winnerTeam = (AppState.scoreA >= 21) ? 'A' : 'B';
+        showGameOverModal(AppState.winnerTeam);
+        showMovementBanner(`🏆 21점 달성! 듀스 없이 세트 종료 (${AppState.winnerTeam === 'A' ? 'Team AB' : 'Team CD'} 승리)`, '경기 종료');
+      }
+
+      updatePlayerTargets(swappedTeam);
+      holdShuttleAtServerHand();
+
+      // Launch serve if game is still active
+      if (!AppState.isGameOver) {
+        AppState.pendingServe = true;
+        if (!AppState.moveAnim.active) {
+          setTimeout(() => {
+            if (AppState.pendingServe) triggerServeFlight();
+          }, 350);
+        }
+      }
+
+      updateUI();
+      render();
+    }
+
+    function minusScore(team) {
+      if (team === 'A' && AppState.scoreA > 0) AppState.scoreA--;
+      if (team === 'B' && AppState.scoreB > 0) AppState.scoreB--;
+
+      // Reopen game if reduced from 21
+      if (AppState.isGameOver && AppState.scoreA < 21 && AppState.scoreB < 21) {
+        AppState.isGameOver = false;
+        AppState.winnerTeam = null;
+        hideGameOverModal();
+      }
+
+      // Revert court change if reduced below 11
+      if (AppState.courtSwapped && Math.max(AppState.scoreA, AppState.scoreB) < 11) {
+        AppState.courtSwapped = false;
+        hideCourtChangeToast();
+        showMovementBanner(`점수 정정: 11점 미만으로 원 진영 복귀`, '진영 원복');
+      }
+
+      updatePlayerTargets(null);
+      holdShuttleAtServerHand();
+      AppState.pendingServe = false;
+      updateUI();
+      render();
+    }
+
+    function resizeCanvas() {
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      
+      // Explicit CSS width and height to prevent canvas stretching and DPR zoom errors
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+
+      // Include margins around the court for player avatars, labels, and backlines
+      const marginX = 0.5; // 0.5m left/right margins
+      const marginY = 0.8; // 0.8m top/bottom margins
+      const totalVirtualW = COURT.width + marginX * 2;   // 7.10m
+      const totalVirtualH = COURT.length + marginY * 2; // 15.00m
+
+      // Calculate best fit scale ensuring 100% of court and player avatars fit comfortably
+      const scale = Math.min(rect.width / totalVirtualW, rect.height / totalVirtualH);
+
+      viewTransform.scale = scale;
+      viewTransform.courtWidthPx = COURT.width * scale;
+      viewTransform.courtHeightPx = COURT.length * scale;
+
+      // Perfectly center the court inside container
+      viewTransform.offsetX = (rect.width - viewTransform.courtWidthPx) / 2;
+      viewTransform.offsetY = (rect.height - viewTransform.courtHeightPx) / 2;
+
+      render();
+    }
+
+    // 1. Court Green Mat
+    function drawCourtMat() {
+      const x = toPixelX(0);
+      const y = toPixelY(0);
+      const w = viewTransform.courtWidthPx;
+      const h = viewTransform.courtHeightPx;
+
+      ctx.fillStyle = '#064e3b'; // Official BWF Emerald Green
+      ctx.fillRect(x, y, w, h);
+    }
+
+    // 2. Valid Diagonal Service Box (Subtle highlight with non-blocking corner badge)
+    function drawValidServiceArea() {
+      const box = getValidServiceBox();
+      const p1X = toPixelX(box.minX);
+      const p1Y = toPixelY(box.minY);
+      const p2X = toPixelX(box.maxX);
+      const p2Y = toPixelY(box.maxY);
+
+      const bx = Math.min(p1X, p2X);
+      const by = Math.min(p1Y, p2Y);
+      const bw = Math.abs(p2X - p1X);
+      const bh = Math.abs(p2Y - p1Y);
+
+      ctx.save();
+      // Glowing green fill
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+      ctx.fillRect(bx, by, bw, bh);
+
+      // Clean dashed border
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.setLineDash([]);
+
+      // Small corner badge (Does not block player names or circle)
+      const badgeW = 72;
+      const badgeH = 16;
+      const badgeX = bx + bw / 2 - badgeW / 2;
+      const { serverId } = getServePositions();
+      const serverSide = getPlayerSide(serverId);
+      const badgeY = (serverSide === 'bottom') ? (by + 4) : (by + bh - 20);
+
+      ctx.fillStyle = 'rgba(6, 78, 59, 0.9)';
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+      ctx.fill();
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = '#6ee7b7';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✓ 서브 유효 (IN)', badgeX + badgeW / 2, badgeY + badgeH / 2);
+
+      ctx.restore();
+    }
+
+    // 3. Official Lines (Including Singles Sidelines & 0.76m Doubles Fault Zone)
+    function drawCourtLines() {
+      ctx.save();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(1.5, viewTransform.scale * 0.04);
+      ctx.lineCap = 'square';
+
+      // Doubles Outer Boundary Line
+      ctx.strokeRect(toPixelX(0), toPixelY(0), viewTransform.courtWidthPx, viewTransform.courtHeightPx);
+
+      // Singles Sidelines (0.46m inside both edges)
+      const leftSingles = toPixelX(COURT.alley);
+      const rightSingles = toPixelX(COURT.width - COURT.alley);
+      ctx.beginPath();
+      ctx.moveTo(leftSingles, toPixelY(0));
+      ctx.lineTo(leftSingles, toPixelY(COURT.length));
+      ctx.moveTo(rightSingles, toPixelY(0));
+      ctx.lineTo(rightSingles, toPixelY(COURT.length));
+      ctx.stroke();
+
+      // Doubles Long Service Lines (0.76m from backlines)
+      const topLong = toPixelY(Y_LINES.longTop);
+      const botLong = toPixelY(Y_LINES.longBottom);
+      ctx.beginPath();
+      ctx.moveTo(toPixelX(0), topLong);
+      ctx.lineTo(toPixelX(COURT.width), topLong);
+      ctx.moveTo(toPixelX(0), botLong);
+      ctx.lineTo(toPixelX(COURT.width), botLong);
+      ctx.stroke();
+
+      // Short Service Lines (1.98m from net)
+      const topShort = toPixelY(Y_LINES.shortTop);
+      const botShort = toPixelY(Y_LINES.shortBottom);
+      ctx.beginPath();
+      ctx.moveTo(toPixelX(0), topShort);
+      ctx.lineTo(toPixelX(COURT.width), topShort);
+      ctx.moveTo(toPixelX(0), botShort);
+      ctx.lineTo(toPixelX(COURT.width), botShort);
+      ctx.stroke();
+
+      // Center Lines (From short service line to backline)
+      const midX = toPixelX(COURT.width / 2);
+      ctx.beginPath();
+      ctx.moveTo(midX, toPixelY(0));
+      ctx.lineTo(midX, topShort);
+      ctx.moveTo(midX, botShort);
+      ctx.lineTo(midX, toPixelY(COURT.length));
+      ctx.stroke();
+
+      // Net (Middle line with post markers)
+      const netY = toPixelY(Y_LINES.net);
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(toPixelX(0) - 5, netY);
+      ctx.lineTo(toPixelX(COURT.width) + 5, netY);
+      ctx.stroke();
+
+      // Net Posts
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(toPixelX(0) - 7, netY - 3, 5, 6);
+      ctx.fillRect(toPixelX(COURT.width) + 2, netY - 3, 5, 6);
+
+      ctx.restore();
+    }
+
+    // 4. Single Clean Diagonal Serve Arrow (No clutter, single arrow)
+    function drawSingleDiagonalArrow() {
+      const { serverId } = getServePositions();
+      const serverPlayer = AppState.players[serverId];
+      const box = getValidServiceBox();
+
+      if (!serverPlayer) return;
+
+      const startPxX = toPixelX(serverPlayer.curX);
+      const startPxY = toPixelY(serverPlayer.curY);
+      const targetPxX = toPixelX((box.minX + box.maxX) / 2);
+      const targetPxY = toPixelY((box.minY + box.maxY) / 2);
+
+      ctx.save();
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#059669';
+      ctx.shadowBlur = 6;
+
+      ctx.beginPath();
+      ctx.moveTo(startPxX, startPxY);
+      ctx.lineTo(targetPxX, targetPxY);
+      ctx.stroke();
+
+      // Arrowhead
+      const angle = Math.atan2(targetPxY - startPxY, targetPxX - startPxX);
+      const headLen = 14;
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.moveTo(targetPxX, targetPxY);
+      ctx.lineTo(
+        targetPxX - headLen * Math.cos(angle - Math.PI / 6),
+        targetPxY - headLen * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.lineTo(
+        targetPxX - headLen * Math.cos(angle + Math.PI / 6),
+        targetPxY - headLen * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // 5. Four Player Avatars (A, B, C, D)
+    function drawPlayers() {
+      const { serverId, receiverId } = getServePositions();
+      const radius = Math.max(14, viewTransform.courtWidthPx * 0.056);
+
+      Object.values(AppState.players).forEach(p => {
+        const px = toPixelX(p.curX);
+        const py = toPixelY(p.curY);
+        const isServer = (p.id === serverId);
+        const isReceiver = (p.id === receiverId);
+
+        ctx.save();
+
+        // Pulsing Ring for Server or Receiver
+        if (isServer) {
+          ctx.strokeStyle = '#fbbf24'; // Gold ring for server
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(px, py, radius + 4, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (isReceiver) {
+          ctx.strokeStyle = '#34d399'; // Emerald ring for receiver
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(px, py, radius + 4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Player Circle Body
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Player Letter (A, B, C, D)
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${Math.round(radius * 0.95)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.id, px, py);
+
+        // Name & Role Tag Pill
+        let roleTag = '';
+        if (isServer) roleTag = '서버 🏸';
+        else if (isReceiver) roleTag = '리시버 🎯';
+        else roleTag = (p.id === 'B' || p.id === 'D') ? '파트너' : '';
+
+        const labelText = roleTag ? `${p.name} (${roleTag})` : p.name;
+        ctx.font = 'bold 9.5px sans-serif';
+        const textWidth = ctx.measureText(labelText).width;
+        const playerSide = getPlayerSide(p.id);
+        const tagY = (playerSide === 'bottom') ? (py + radius + 10) : (py - radius - 7);
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.beginPath();
+        ctx.roundRect(px - textWidth / 2 - 4, tagY - 6, textWidth + 8, 13, 3);
+        ctx.fill();
+        ctx.fillStyle = isServer ? '#fbbf24' : (isReceiver ? '#34d399' : '#cbd5e1');
+        ctx.fillText(labelText, px, tagY);
+
+        ctx.restore();
+      });
+    }
+
+    // 6. Draw Shuttlecock (At Server's hand when idle, or flying in parabolic arc)
+    function drawShuttlecock() {
+      const { serverId } = getServePositions();
+      const server = AppState.players[serverId];
+      const serverSide = getPlayerSide(serverId);
+
+      let curX, curY, zHeight = 0;
+
+      if (!AppState.shuttle.inFlight && !AppState.shuttle.hasLanded) {
+        // Holding by server at server's hand!
+        if (server) {
+          curX = server.curX + 0.35;
+          curY = (serverSide === 'bottom') ? server.curY - 0.45 : server.curY + 0.45;
+        } else {
+          curX = AppState.shuttle.startX;
+          curY = AppState.shuttle.startY;
+        }
+        zHeight = 0.35; // raised at hand level
+      } else if (AppState.shuttle.inFlight) {
+        // Flying between start and target
+        curX = AppState.shuttle.startX + (AppState.shuttle.targetX - AppState.shuttle.startX) * AppState.shuttle.progress;
+        curY = AppState.shuttle.startY + (AppState.shuttle.targetY - AppState.shuttle.startY) * AppState.shuttle.progress;
+        zHeight = Math.sin(AppState.shuttle.progress * Math.PI) * 1.8;
+      } else {
+        // Landed at destination
+        curX = AppState.shuttle.targetX;
+        curY = AppState.shuttle.targetY;
+        zHeight = 0.0;
+      }
+
+      const groundX = toPixelX(curX);
+      const groundY = toPixelY(curY);
+      const airY = groundY - zHeight * viewTransform.scale * 0.45;
+
+      // Shadow on ground
+      ctx.save();
+      const shadowScale = Math.max(0.4, 1.0 - zHeight * 0.3);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(groundX, groundY, 6 * shadowScale, 3 * shadowScale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Shuttlecock Body
+      ctx.translate(groundX, airY);
+
+      // Rotation angle
+      let angle = 0;
+      if (AppState.shuttle.inFlight) {
+        const dx = toPixelX(AppState.shuttle.targetX) - toPixelX(AppState.shuttle.startX);
+        const dy = toPixelY(AppState.shuttle.targetY) - toPixelY(AppState.shuttle.startY);
+        angle = Math.atan2(dy, dx) - Math.PI / 2;
+      } else {
+        angle = (serverSide === 'bottom') ? 0 : Math.PI;
+      }
+      ctx.rotate(angle);
+
+      // Feather skirt
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(-4, 3);
+      ctx.lineTo(4, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Cork Head
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(0, 4, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Server Hand Glowing Halo when idle
+      if (!AppState.shuttle.inFlight && !AppState.shuttle.hasLanded) {
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 11, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawCourtMat();
+      drawValidServiceArea();
+      drawCourtLines();
+      drawSingleDiagonalArrow();
+      drawPlayers();
+      drawShuttlecock();
+    }
+
+    let lastTime = 0;
+    function animLoop(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+      lastTime = timestamp;
+
+      // Player Position Interpolation (Ease-out)
+      if (AppState.moveAnim.active) {
+        AppState.moveAnim.progress += dt * 1.8;
+        const t = Math.min(1.0, AppState.moveAnim.progress);
+        const ease = 1 - Math.pow(1 - t, 3);
+
+        Object.values(AppState.players).forEach(p => {
+          if (p.isMoving) {
+            p.curX = p.prevX + (p.targetX - p.prevX) * ease;
+            p.curY = p.prevY + (p.targetY - p.prevY) * ease;
+          }
+        });
+
+        if (AppState.moveAnim.progress >= 1.0) {
+          AppState.moveAnim.active = false;
+          Object.values(AppState.players).forEach(p => {
+            p.curX = p.targetX;
+            p.curY = p.targetY;
+            p.isMoving = false;
+          });
+
+          // Hold shuttle in hand then launch
+          holdShuttleAtServerHand();
+          if (AppState.pendingServe) {
+            setTimeout(() => {
+              if (AppState.pendingServe) triggerServeFlight();
+            }, 200);
+          }
+        }
+      }
+
+      // Shuttlecock Flight Animation
+      if (AppState.shuttle.inFlight) {
+        AppState.shuttle.progress += dt * 1.6;
+        if (AppState.shuttle.progress >= 1.0) {
+          AppState.shuttle.progress = 1.0;
+          AppState.shuttle.inFlight = false;
+          AppState.shuttle.hasLanded = true;
+        }
+      }
+
+      render();
+      requestAnimationFrame(animLoop);
+    }
+
+    // Event Listeners
+    btnPlusA.addEventListener('click', (e) => { e.stopPropagation(); addScore('A'); });
+    btnMinusA.addEventListener('click', (e) => { e.stopPropagation(); minusScore('A'); });
+    btnPlusB.addEventListener('click', (e) => { e.stopPropagation(); addScore('B'); });
+    btnMinusB.addEventListener('click', (e) => { e.stopPropagation(); minusScore('B'); });
+
+    // Switch Serve Listeners (Anytime Toggle)
+    btnHeaderSwitchServe.addEventListener('click', () => toggleServingTeam());
+    btnMainSwitchServe.addEventListener('click', () => toggleServingTeam());
+    btnServingPill.addEventListener('click', () => toggleServingTeam());
+    cardTeamA.addEventListener('click', () => toggleServingTeam('A'));
+    cardTeamB.addEventListener('click', () => toggleServingTeam('B'));
+
+    btnResetAll.addEventListener('click', () => {
+      AppState.scoreA = 0;
+      AppState.scoreB = 0;
+      AppState.servingTeam = 'A';
+      resetRoster();
+      holdShuttleAtServerHand();
+      showMovementBanner('경기 리셋 (0:0) - 21점 단세트(노듀스) / 11점 코트 체인지', '초기화');
+      updateUI();
+      render();
+    });
+
+    btnModalRestart.addEventListener('click', () => {
+      btnResetAll.click();
+    });
+    btnModalClose.addEventListener('click', () => {
+      hideGameOverModal();
+    });
+
+    btnTriggerServe.addEventListener('click', () => {
+      if (!AppState.isGameOver) triggerServeFlight();
+    });
+
+    // Tap Court to custom aim serve
+    function handleCourtClick(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clickPxX = (e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0)) - rect.left;
+      const clickPxY = (e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0)) - rect.top;
+
+      const mX = toMeterX(clickPxX);
+      const mY = toMeterY(clickPxY);
+
+      if (mX >= 0 && mX <= COURT.width && mY >= 0 && mY <= COURT.length) {
+        AppState.shuttle.targetX = mX;
+        AppState.shuttle.targetY = mY;
+        triggerServeFlight();
+      }
+    }
+
+    canvas.addEventListener('click', handleCourtClick);
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 150));
+
+    // Initialize application on load
+    window.onload = function() {
+      resizeCanvas();
+      resetRoster();
+      holdShuttleAtServerHand();
+      updateUI();
+      requestAnimationFrame(animLoop);
+    };
+  </script>
+</body>
+</html>
